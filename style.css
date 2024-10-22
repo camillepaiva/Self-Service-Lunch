@@ -136,7 +136,7 @@
   }
 
   .product_container {
-    width: 100px;
+    width: 120px;
     height: 140px;
   }
 
@@ -154,8 +154,9 @@
   }
 
   .sumary {
-    max-height: 300px;
+    min-height: 200px;
     padding-right: 10px;
+    padding-bottom: 9%;
   }
 
   th,
