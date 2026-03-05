@@ -1,72 +1,300 @@
-<!DOCTYPE html>
-<html lang="en">
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="style.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Self Service</title>
+    <meta name="description" content="Drive Lanches: autoatendimento para montar pedido." />
+    <title>Drive Lanches</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <main id="app">
-      <div class="page">
-        <section class="page_container">
-          <h4>Select Your Itens</h4>
-          <div class="self_service_container">
-            <div v-for="product in products">
-              <div
-                class="product_container"
-                @click="product.active = !product.active"
-                :class="{ selected: product.active }"
-              >
-                <img :src="product.photo" class="img_itens" />
-                <p>{{product.name}}</p>
-                <p>{{product.price}}</p>
-                <div class="quantity_container" v-if="product.active">
-                  <button
-                    class="button"
-                    @click.stop="product.quantity-=1"
-                    :disabled="product.quantity <= 1"
-                  >
-                    -
-                  </button>
-                  <p>{{product.quantity}}</p>
-                  <button class="button" @click.stop="product.quantity+=1">
-                    +
-                  </button>
-                </div>
-              </div>
-            </div>
+    <div id="app" v-cloak>
+      <main class="page">
+        <section class="menu-panel" aria-labelledby="menu-title">
+          <header class="menu-panel__header">
+            <p class="eyebrow">Autoatendimento</p>
+            <h1 id="menu-title">Drive Lanches</h1>
+            <p>Monte seu pedido com filtros, adicionais e escolha de retirada ou entrega.</p>
+          </header>
+
+          <div class="menu-tools">
+            <label class="field">
+              <span>Busca</span>
+              <input
+                v-model.trim="searchTerm"
+                type="search"
+                placeholder="Ex.: Big Mac, fries..."
+                aria-label="Buscar produto"
+              />
+            </label>
+
+            <label class="field">
+              <span>Categoria</span>
+              <select v-model="selectedCategory" aria-label="Filtrar categoria">
+                <option v-for="category in categories" :key="category" :value="category">
+                  {{ category }}
+                </option>
+              </select>
+            </label>
           </div>
+
+          <p class="menu-result">
+            {{ filteredProducts.length }} itens encontrados |
+            {{ selectedUnits }} selecionados
+          </p>
+
+          <div v-if="filteredProducts.length > 0" class="self-service-container">
+            <article
+              v-for="product in filteredProducts"
+              :key="product.id"
+              class="product-card"
+              :class="{ selected: product.active }"
+              @click="toggleProduct(product)"
+            >
+              <img :src="product.photo" :alt="`Foto de ${product.name}`" class="product-image" />
+              <h2>{{ product.name }}</h2>
+              <p class="category">{{ product.category }}</p>
+              <p class="description">{{ product.description }}</p>
+              <p class="price">{{ formatCurrency(product.price) }}</p>
+
+              <fieldset
+                v-if="product.active && product.extras.length > 0"
+                class="extra-list"
+                @click.stop
+              >
+                <legend>Adicionais</legend>
+                <label v-for="extra in product.extras" :key="extra.id" class="extra-item">
+                  <input
+                    type="checkbox"
+                    :checked="isExtraSelected(product, extra.id)"
+                    @change="toggleExtra(product, extra.id)"
+                  />
+                  <span>{{ extra.name }}</span>
+                  <small>+ {{ formatCurrency(extra.price) }}</small>
+                </label>
+              </fieldset>
+
+              <div v-if="product.active" class="quantity-container" @click.stop>
+                <button
+                  type="button"
+                  class="qty-btn"
+                  @click="decreaseQuantity(product)"
+                  :disabled="product.quantity <= 1"
+                >
+                  -
+                </button>
+                <span>{{ product.quantity }}</span>
+                <button type="button" class="qty-btn" @click="increaseQuantity(product)">+</button>
+              </div>
+            </article>
+          </div>
+
+          <p v-else class="summary-empty">Nenhum item encontrado para esse filtro.</p>
         </section>
 
-        <div v-if="totalItens()>0" class="sumary">
-          <strong class="title_sumary">Order Details</strong>
-          <table>
-            <thead>
-              <tr>
-                <th>Item</th>
-                <th>Total</th>
-              </tr>
-            </thead>
+        <aside class="summary-panel" aria-labelledby="summary-title">
+          <h2 id="summary-title">Resumo do pedido</h2>
 
-            <tbody>
-              <tr v-for="product in products">
-                <template v-if="product.active">
-                  <td>{{product.quantity + " x " + product.name}}</td>
-                  <td>{{(product.quantity * product.price).toFixed(2)}}</td>
-                </template>
-              </tr>
+          <p v-if="selectedProducts.length === 0" class="summary-empty">Nenhum item selecionado.</p>
 
-              <tr>
-                <th>Total</th>
-                <th>{{totalItens()}}</th>
-              </tr>
-            </tbody>
-          </table>
+          <ul v-else class="summary-list">
+            <li v-for="item in selectedProducts" :key="item.id">
+              <div>
+                <strong>{{ item.quantity }} x {{ item.name }}</strong>
+                <p v-if="item.selectedExtras.length > 0">
+                  + {{ item.selectedExtras.map((extra) => extra.name).join(", ") }}
+                </p>
+                <small>{{ formatCurrency(item.unitPrice) }} por unidade</small>
+              </div>
+              <span>{{ formatCurrency(item.subtotal) }}</span>
+            </li>
+          </ul>
+
+          <section class="order-settings">
+            <label class="field">
+              <span>Tipo do pedido</span>
+              <select v-model="orderType" aria-label="Tipo de pedido">
+                <option value="Balcao">Balcao</option>
+                <option value="Drive-thru">Drive-thru</option>
+                <option value="Entrega">Entrega</option>
+              </select>
+            </label>
+
+            <div class="coupon-box">
+              <label class="field">
+                <span>Cupom</span>
+                <input
+                  v-model.trim="couponInput"
+                  type="text"
+                  placeholder="LANCHES10 ou COMBO5"
+                  aria-label="Cupom de desconto"
+                />
+              </label>
+              <div class="coupon-actions">
+                <button type="button" class="action-btn" @click="applyCoupon">Aplicar</button>
+                <button
+                  type="button"
+                  class="action-btn ghost"
+                  @click="removeCoupon"
+                  :disabled="!appliedCouponCode"
+                >
+                  Remover
+                </button>
+              </div>
+              <p v-if="couponFeedback" class="coupon-feedback">{{ couponFeedback }}</p>
+            </div>
+
+            <label class="field">
+              <span>Observacoes</span>
+              <textarea
+                v-model.trim="orderNote"
+                maxlength="140"
+                rows="3"
+                placeholder="Ex.: sem cebola, ponto da carne, etc."
+              ></textarea>
+            </label>
+          </section>
+
+          <section class="total-box">
+            <p>
+              <span>Subtotal</span>
+              <strong>{{ formatCurrency(subtotal) }}</strong>
+            </p>
+            <p>
+              <span>Desconto</span>
+              <strong>- {{ formatCurrency(discountAmount) }}</strong>
+            </p>
+            <p>
+              <span>Taxa de entrega</span>
+              <strong>{{ formatCurrency(deliveryFeeAmount) }}</strong>
+            </p>
+            <p class="total-line">
+              <span>Total</span>
+              <strong>{{ formatCurrency(totalValue) }}</strong>
+            </p>
+            <p v-if="canFinalize" class="eta">Tempo estimado: {{ estimatedMinutes }} min</p>
+          </section>
+
+          <div class="summary-actions">
+            <button type="button" class="action-btn ghost" @click="clearOrder">Limpar pedido</button>
+            <button type="button" class="action-btn" @click="finalizeOrder" :disabled="!canFinalize">
+              Finalizar pedido
+            </button>
+          </div>
+        </aside>
+      </main>
+
+      <section
+        v-if="isReviewOpen && reviewOrder"
+        class="checkout-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="review-title"
+        @click.self="closeCheckoutReview"
+      >
+        <div class="checkout-modal__card">
+          <header class="checkout-modal__header">
+            <h2 id="review-title">{{ reviewStep === "confirmed" ? "Pedido confirmado" : "Conferencia do pedido" }}</h2>
+            <button type="button" class="close-btn" @click="closeCheckoutReview" aria-label="Fechar resumo">
+              Fechar
+            </button>
+          </header>
+
+          <p v-if="reviewStep === 'review'" class="review-subtitle">
+            Pedido <strong>{{ reviewOrder.code }}</strong> | {{ reviewOrder.createdAt }}
+          </p>
+
+          <ul v-if="reviewStep === 'review'" class="review-list">
+            <li v-for="item in reviewOrder.items" :key="item.id">
+              <div>
+                <strong>{{ item.quantity }} x {{ item.name }}</strong>
+                <p v-if="item.extras.length > 0">+ {{ item.extras.join(", ") }}</p>
+                <small>{{ formatCurrency(item.unitPrice) }} por unidade</small>
+              </div>
+              <span>{{ formatCurrency(item.subtotal) }}</span>
+            </li>
+          </ul>
+
+          <section v-if="reviewStep === 'review'" class="review-meta">
+            <p>
+              <span>Tipo</span>
+              <strong>{{ reviewOrder.orderType }}</strong>
+            </p>
+            <p>
+              <span>Cupom</span>
+              <strong>{{ reviewOrder.couponCode || "Sem cupom" }}</strong>
+            </p>
+            <p>
+              <span>Observacao</span>
+              <strong>{{ reviewOrder.orderNote || "Sem observacoes" }}</strong>
+            </p>
+            <p>
+              <span>Tempo estimado</span>
+              <strong>{{ reviewOrder.estimatedMinutes }} min</strong>
+            </p>
+          </section>
+
+          <section class="review-total">
+            <p>
+              <span>Subtotal</span>
+              <strong>{{ formatCurrency(reviewOrder.subtotal) }}</strong>
+            </p>
+            <p>
+              <span>Desconto</span>
+              <strong>- {{ formatCurrency(reviewOrder.discountAmount) }}</strong>
+            </p>
+            <p>
+              <span>Taxa de entrega</span>
+              <strong>{{ formatCurrency(reviewOrder.deliveryFeeAmount) }}</strong>
+            </p>
+            <p class="total-line">
+              <span>Total</span>
+              <strong>{{ formatCurrency(reviewOrder.totalValue) }}</strong>
+            </p>
+          </section>
+
+          <section v-if="reviewStep === 'confirmed'" class="confirmed-box">
+            <pre class="receipt-preview">{{ buildReceiptText(reviewOrder) }}</pre>
+            <p class="checkout-message">
+              {{ reviewOrder.confirmationMessage }}
+            </p>
+            <p class="confirmed-meta">
+              Confirmado em {{ reviewOrder.confirmedAt }}.
+            </p>
+            <p class="confirmed-meta">
+              Seu pedido foi enviado para a cozinha e o menu ja esta pronto para um novo pedido.
+            </p>
+            <p class="confirmed-meta">
+              Clique em "Baixar PDF" se quiser salvar a notinha.
+            </p>
+          </section>
+
+          <div v-if="reviewStep === 'review'" class="review-actions">
+            <button type="button" class="action-btn ghost" @click="closeCheckoutReview">Voltar ao menu</button>
+            <button type="button" class="action-btn" @click="confirmOrder">Confirmar pedido</button>
+          </div>
+
+          <div v-else class="review-actions">
+            <button type="button" class="action-btn ghost" @click="downloadConfirmedReceipt">
+              Baixar PDF
+            </button>
+            <button type="button" class="action-btn" @click="closeCheckoutReview">
+              Voltar ao menu de selecao
+            </button>
+          </div>
         </div>
-      </div>
-    </main>
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="script.js"></script>
+      </section>
+    </div>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="./src/utils/currency.js"></script>
+    <script src="./src/data/products.js"></script>
+    <script src="./src/main.js"></script>
   </body>
 </html>
